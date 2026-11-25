@@ -51,6 +51,8 @@ sealed interface BrowserOverlay {
     data object AiSearch : BrowserOverlay
     data object Translate : BrowserOverlay
     data object About : BrowserOverlay
+    data object WallpaperStudio : BrowserOverlay
+    data class WallpaperPreview(val wallpaperId: String) : BrowserOverlay
 }
 
 data class PendingDownloadPrompt(

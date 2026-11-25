@@ -38,6 +38,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.Wallpaper
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -80,6 +81,7 @@ fun BrowserMenuSheet(
     onTranslatePage: () -> Unit,
     onAddToHomeScreen: () -> Unit,
     onPrintPage: () -> Unit,
+    onOpenWallpaperStudio: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenAbout: () -> Unit
 ) {
@@ -301,6 +303,7 @@ fun BrowserMenuSheet(
                     modifier = Modifier.padding(vertical = 6.dp)
                 )
 
+                MenuListRow(Icons.Default.Wallpaper, "DSK Wallpaper Studio", "Photos, videos, AI & 5 DSK live wallpapers", "menu_wallpaper_studio", true, onOpenWallpaperStudio)
                 MenuListRow(Icons.Default.Settings, "Settings", "Toolbar position, search, theme & privacy", "menu_settings", true, onOpenSettings)
                 MenuListRow(Icons.Default.Info, "About DSK Chrome", "Version & DSK OFFICIAL info", "menu_about", true, onOpenAbout)
             }

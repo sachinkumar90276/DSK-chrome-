@@ -35,7 +35,37 @@ jobs:
           java-version: '21'
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          if [ ! -d "$SDK_ROOT" ]; then
+            echo "ERROR: Android SDK root directory not found at $SDK_ROOT"
+            exit 1
+          fi
+
+          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
+
+          SDKMANAGER="$(command -v sdkmanager || find "$SDK_ROOT/cmdline-tools" -name sdkmanager -type f 2>/dev/null | head -n 1 || true)"
+          if [ -z "$SDKMANAGER" ]; then
+            echo "ERROR: sdkmanager not found under $SDK_ROOT"
+            exit 1
+          fi
+
+          echo "$(dirname "$SDKMANAGER")" >> "$GITHUB_PATH"
+          echo "$SDK_ROOT/platform-tools" >> "$GITHUB_PATH"
+          echo "$SDK_ROOT/build-tools/36.0.0" >> "$GITHUB_PATH"
+
+          { yes || true; } | "$SDKMANAGER" --sdk_root="$SDK_ROOT" --licenses >/dev/null
+          "$SDKMANAGER" --sdk_root="$SDK_ROOT" \
+            "platform-tools" \
+            "platforms;android-36.1" \
+            "platforms;android-36" \
+            "build-tools;36.0.0"
+
+          test -d "$SDK_ROOT/platforms/android-36.1"
+          test -d "$SDK_ROOT/build-tools/36.0.0"
 
       - name: Set up Gradle 9.3.1
         uses: gradle/actions/setup-gradle@v4
@@ -43,7 +73,9 @@ jobs:
           gradle-version: '9.3.1'
 
       - name: Prepare debug keystore
+        shell: bash
         run: |
+          set -euo pipefail
           if [ ! -f debug.keystore ] && [ -f debug.keystore.base64 ]; then
             base64 --decode debug.keystore.base64 > debug.keystore
           fi
@@ -55,18 +87,24 @@ jobs:
         run: gradle :app:assembleDebug --no-daemon
 
       - name: Validate APK output
+        shell: bash
         run: |
+          set -euo pipefail
           APK_PATH="app/build/outputs/apk/debug/app-debug.apk"
-          if [ ! -f "$APK_PATH" ]; then
-            echo "ERROR: Expected APK not found at $APK_PATH"
+          if [ ! -s "$APK_PATH" ]; then
+            echo "ERROR: Expected non-empty APK at $APK_PATH"
             exit 1
           fi
           ls -lh "$APK_PATH"
+          AAPT2="$ANDROID_SDK_ROOT/build-tools/36.0.0/aapt2"
+          if [ -x "$AAPT2" ]; then
+            "$AAPT2" dump badging "$APK_PATH" | grep -E "^(package:|application-label:)"
+          fi
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: DSK-CHROME-ANDROID-APK
+          name: DSK-CHROME-APK
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 30

@@ -12,9 +12,10 @@ import androidx.room.RoomDatabase
         DownloadEntity::class,
         SitePermissionEntity::class,
         ShortcutEntity::class,
-        SavedTabEntity::class
+        SavedTabEntity::class,
+        WallpaperEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class BrowserDatabase : RoomDatabase() {
@@ -24,6 +25,7 @@ abstract class BrowserDatabase : RoomDatabase() {
     abstract fun sitePermissionDao(): SitePermissionDao
     abstract fun shortcutDao(): ShortcutDao
     abstract fun savedTabDao(): SavedTabDao
+    abstract fun wallpaperDao(): WallpaperDao
 
     companion object {
         @Volatile

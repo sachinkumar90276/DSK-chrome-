@@ -157,93 +157,11 @@ fun HomeScreen(
         }
     }
 
-    Box(modifier = modifier.fillMaxSize()) {
-        // Wallpaper Background Layer
-        if (isIncognito) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(Color(0xFF151022), Color(0xFF0B0912))
-                        )
-                    )
-            )
-        } else {
-            when (settings.wallpaperPreset) {
-                WallpaperPreset.AURORA -> {
-                    Image(
-                        painter = painterResource(id = R.drawable.img_wallpaper_aurora),
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(
-                                if (useDarkUi) Color(0xAA070B14) else Color(0x99F4F7FC)
-                            )
-                    )
-                }
-                WallpaperPreset.PRISM -> {
-                    Image(
-                        painter = painterResource(id = R.drawable.img_wallpaper_prism),
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(
-                                if (useDarkUi) Color(0xB8070B14) else Color(0x55F4F7FC)
-                            )
-                    )
-                }
-                WallpaperPreset.CUSTOM -> {
-                    val customFile = File(settings.customWallpaperPath)
-                    if (settings.customWallpaperPath.isNotBlank() && customFile.exists()) {
-                        AsyncImage(
-                            model = customFile,
-                            contentDescription = null,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(
-                                    if (useDarkUi) Color(0x99070B14) else Color(0x88FFFFFF)
-                                )
-                        )
-                    } else {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(MaterialTheme.colorScheme.background)
-                        )
-                    }
-                }
-                WallpaperPreset.OBSIDIAN -> {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(
-                                Brush.verticalGradient(
-                                    colors = if (useDarkUi) {
-                                        listOf(Color(0xFF0A1428), Color(0xFF070B14))
-                                    } else {
-                                        listOf(Color(0xFFEAF1FD), Color(0xFFF7F9FD))
-                                    }
-                                )
-                            )
-                    )
-                }
-            }
-        }
+    val uiAlpha = settings.uiTransparency.coerceIn(0.35f, 1f)
+    val glassBorderAlpha = if (settings.glassEffectEnabled) 0.24f else 0.12f
 
-        // Content Scroll
+    Box(modifier = modifier.fillMaxSize()) {
+        // Content Scroll over shared BrowserWallpaperBackdrop
         LazyColumn(
             horizontalAlignment = Alignment.CenterHorizontally,
             contentPadding = PaddingValues(bottom = 28.dp),
@@ -455,13 +373,17 @@ fun HomeScreen(
                 ) {
                     Surface(
                         shape = RoundedCornerShape(28.dp),
-                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
-                        shadowElevation = 6.dp,
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = uiAlpha.coerceAtLeast(0.45f)),
+                        shadowElevation = if (settings.glassEffectEnabled) 4.dp else 6.dp,
                         modifier = Modifier
                             .fillMaxWidth()
                             .border(
                                 1.dp,
-                                MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
+                                if (settings.glassEffectEnabled) {
+                                    Color.White.copy(alpha = glassBorderAlpha)
+                                } else {
+                                    MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)
+                                },
                                 RoundedCornerShape(28.dp)
                             )
                     ) {
@@ -637,11 +559,12 @@ fun HomeScreen(
                 ) {
                     Surface(
                         shape = RoundedCornerShape(24.dp),
-                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = uiAlpha),
                         shadowElevation = 2.dp,
                         modifier = Modifier
                             .weight(1f)
                             .clip(RoundedCornerShape(24.dp))
+                            .border(1.dp, Color.White.copy(alpha = glassBorderAlpha * 0.7f), RoundedCornerShape(24.dp))
                             .clickable(onClick = onOpenAiSearch)
                             .testTag("home_ai_search_pill")
                     ) {
@@ -667,11 +590,12 @@ fun HomeScreen(
 
                     Surface(
                         shape = RoundedCornerShape(24.dp),
-                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = uiAlpha),
                         shadowElevation = 2.dp,
                         modifier = Modifier
                             .weight(1f)
                             .clip(RoundedCornerShape(24.dp))
+                            .border(1.dp, Color.White.copy(alpha = glassBorderAlpha * 0.7f), RoundedCornerShape(24.dp))
                             .clickable(onClick = onOpenNewIncognitoTab)
                             .testTag("home_incognito_pill")
                     ) {
@@ -734,10 +658,11 @@ fun HomeScreen(
                                     if (shortcut == null) {
                                         Surface(
                                             shape = RoundedCornerShape(18.dp),
-                                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
+                                            color = MaterialTheme.colorScheme.surface.copy(alpha = (uiAlpha * 0.85f).coerceIn(0.3f, 0.95f)),
                                             modifier = Modifier
                                                 .weight(1f)
                                                 .clip(RoundedCornerShape(18.dp))
+                                                .border(1.dp, Color.White.copy(alpha = glassBorderAlpha * 0.55f), RoundedCornerShape(18.dp))
                                                 .clickable(onClick = onOpenAddShortcut)
                                                 .testTag("add_shortcut_button")
                                         ) {
@@ -770,10 +695,11 @@ fun HomeScreen(
                                     } else {
                                         Surface(
                                             shape = RoundedCornerShape(18.dp),
-                                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.88f),
+                                            color = MaterialTheme.colorScheme.surface.copy(alpha = uiAlpha),
                                             modifier = Modifier
                                                 .weight(1f)
                                                 .clip(RoundedCornerShape(18.dp))
+                                                .border(1.dp, Color.White.copy(alpha = glassBorderAlpha * 0.6f), RoundedCornerShape(18.dp))
                                                 .combinedClickable(
                                                     onClick = { onOpenUrl(shortcut.url) },
                                                     onLongClick = { onDeleteShortcut(shortcut.id) }
@@ -833,9 +759,10 @@ fun HomeScreen(
                             items(popularWebsites) { site ->
                                 Surface(
                                     shape = RoundedCornerShape(16.dp),
-                                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.88f),
+                                    color = MaterialTheme.colorScheme.surface.copy(alpha = uiAlpha),
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(16.dp))
+                                        .border(1.dp, Color.White.copy(alpha = glassBorderAlpha * 0.6f), RoundedCornerShape(16.dp))
                                         .clickable { onOpenUrl(site.url) }
                                 ) {
                                     Row(
@@ -886,8 +813,10 @@ fun HomeScreen(
                         Spacer(modifier = Modifier.height(8.dp))
                         Surface(
                             shape = RoundedCornerShape(20.dp),
-                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
-                            modifier = Modifier.fillMaxWidth()
+                            color = MaterialTheme.colorScheme.surface.copy(alpha = uiAlpha),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .border(1.dp, Color.White.copy(alpha = glassBorderAlpha * 0.6f), RoundedCornerShape(20.dp))
                         ) {
                             Column {
                                 recentHistory.take(5).forEachIndexed { idx, entry ->

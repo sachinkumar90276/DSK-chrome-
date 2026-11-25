@@ -67,6 +67,7 @@ fun SettingsScreen(
     settings: BrowserSettings,
     onBack: () -> Unit,
     onOpenPermissions: () -> Unit,
+    onOpenWallpaperStudio: () -> Unit,
     onOpenAbout: () -> Unit,
     onUpdateThemeMode: (ThemeMode) -> Unit,
     onUpdateSearchEngine: (SearchEngine) -> Unit,
@@ -75,6 +76,16 @@ fun SettingsScreen(
     onUpdateSafeSearch: (Boolean) -> Unit,
     onUpdateWallpaperPreset: (WallpaperPreset) -> Unit,
     onUploadWallpaper: () -> Unit,
+    onUpdateWallpaperAppearance: (
+        opacity: Float?,
+        blurDp: Float?,
+        brightness: Float?,
+        uiTransparency: Float?,
+        glassEffect: Boolean?,
+        transparentWebView: Boolean?,
+        aiSuggestions: Boolean?,
+        lowPowerStatic: Boolean?
+    ) -> Unit,
     onUpdateHomepageVisibility: (clock: Boolean?, popular: Boolean?, recent: Boolean?) -> Unit,
     onUpdateToolbarLayout: (ToolbarLayout) -> Unit,
     onUpdateFontSize: (Int) -> Unit,
@@ -187,10 +198,38 @@ fun SettingsScreen(
                         )
                         SettingsDivider()
                         SettingsActionRow(
-                            title = "Wallpaper",
+                            title = "DSK Wallpaper Studio",
+                            subtitle = "Photos, videos, AI wallpapers & 5 DSK live themes",
+                            testTag = "settings_wallpaper_studio",
+                            onClick = onOpenWallpaperStudio
+                        )
+                        SettingsDivider()
+                        SettingsActionRow(
+                            title = "Quick Preset Wallpaper",
                             subtitle = settings.wallpaperPreset.label,
                             testTag = "settings_wallpaper",
                             onClick = { showWallpaperDialog = true }
+                        )
+                        SettingsDivider()
+                        SettingsSwitchRow(
+                            title = "Glassmorphism UI Effect",
+                            subtitle = "Translucent floating panels over active wallpaper",
+                            checked = settings.glassEffectEnabled,
+                            onCheckedChange = { onUpdateWallpaperAppearance(null, null, null, null, it, null, null, null) }
+                        )
+                        SettingsDivider()
+                        SettingsSwitchRow(
+                            title = "Transparent WebView Background",
+                            subtitle = "Reveal browser wallpaper behind transparent webpages",
+                            checked = settings.transparentWebViewEnabled,
+                            onCheckedChange = { onUpdateWallpaperAppearance(null, null, null, null, null, it, null, null) }
+                        )
+                        SettingsDivider()
+                        SettingsSwitchRow(
+                            title = "Low-Power Static Wallpaper Mode",
+                            subtitle = "Pause live & video animations to save battery",
+                            checked = settings.lowPowerStaticWallpaperMode,
+                            onCheckedChange = { onUpdateWallpaperAppearance(null, null, null, null, null, null, null, it) }
                         )
                         SettingsDivider()
                         SettingsActionRow(

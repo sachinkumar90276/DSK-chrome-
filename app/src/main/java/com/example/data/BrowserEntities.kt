@@ -127,3 +127,32 @@ data class SavedTabEntity(
     val sortOrder: Int,
     val updatedAt: Long = System.currentTimeMillis()
 )
+
+@Entity(tableName = "wallpapers")
+data class WallpaperEntity(
+    @PrimaryKey val id: String,
+    val title: String,
+    val type: String, // WallpaperMediaType.name
+    val sourceUriOrPath: String = "",
+    val livePresetId: String = "",
+    val styleTag: String = "",
+    val promptText: String = "",
+    val aspectRatio: String = "9:16",
+    val fitMode: String = "FILL", // WallpaperFitMode.name
+    val zoomScale: Float = 1f,
+    val panX: Float = 0f,
+    val panY: Float = 0f,
+    val brightness: Float = 1f,
+    val contrast: Float = 1f,
+    val blurRadiusDp: Float = 0f,
+    val opacity: Float = 1f,
+    val videoMuted: Boolean = true,
+    val videoLoop: Boolean = true,
+    val videoSpeed: Float = 1f,
+    val videoTrimStartMs: Long = 0L,
+    val videoTrimEndMs: Long = 0L,
+    val isFavorite: Boolean = false,
+    val lastUsedAt: Long = 0L,
+    val createdAt: Long = System.currentTimeMillis()
+)
+

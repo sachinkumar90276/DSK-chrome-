@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">DSK CHROME</string>
+    <string name="live_wallpaper_name">DSK CHROME Live</string>
+    <string name="live_wallpaper_description">Animated Chrome, Neon, Galaxy, Rainy City, and Video wallpapers by DSK OFFICIAL.</string>
 </resources>

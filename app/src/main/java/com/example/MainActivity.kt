@@ -80,7 +80,15 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.PickVisualMedia()
     ) { uri ->
         if (uri != null) {
-            viewModel.setCustomWallpaperUri(uri)
+            viewModel.importPhotoWallpaper(uri, openPreviewAfterImport = true)
+        }
+    }
+
+    private val videoWallpaperPickerLauncher = registerForActivityResult(
+        ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        if (uri != null) {
+            viewModel.importVideoWallpaper(uri, openPreviewAfterImport = true)
         }
     }
 
@@ -128,6 +136,19 @@ class MainActivity : ComponentActivity() {
                             PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
                         )
                     },
+                    onPickVideoWallpaper = {
+                        videoWallpaperPickerLauncher.launch(
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly)
+                        )
+                    },
+                    onLaunchAndroidLiveWallpaperChooser = { wallpaper ->
+                        viewModel.prepareAndroidLiveWallpaper(wallpaper) {
+                            val launched = com.example.wallpaper.LiveWallpaperUtils.launchSystemLiveWallpaperChooser(this)
+                            if (!launched) {
+                                viewModel.showMessage("Live Wallpaper picker is not supported on this device")
+                            }
+                        }
+                    },
                     onAddToHomeScreen = ::pinWebsiteToHomeScreen
                 )
             }
@@ -149,6 +170,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         viewModel.webViewPool.resumeTab(viewModel.activeTab.value.id)
+        viewModel.refreshSystemLiveWallpaperStatus()
     }
 
     override fun onTrimMemory(level: Int) {

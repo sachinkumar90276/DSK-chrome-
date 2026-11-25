@@ -1,7 +1,14 @@
 package com.example.data
 
 import android.content.Context
+import android.content.Intent
+import android.graphics.Bitmap
 import android.net.Uri
+import android.provider.OpenableColumns
+import com.example.wallpaper.AiAspectRatio
+import com.example.wallpaper.AiWallpaperStyle
+import com.example.wallpaper.DskLivePreset
+import com.example.wallpaper.WallpaperMediaType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
@@ -23,6 +30,7 @@ class BrowserRepository(
     private val permissionDao = database.sitePermissionDao()
     private val shortcutDao = database.shortcutDao()
     private val savedTabDao = database.savedTabDao()
+    private val wallpaperDao = database.wallpaperDao()
 
     private val suggestClient = OkHttpClient.Builder()
         .connectTimeout(4, TimeUnit.SECONDS)
@@ -35,6 +43,9 @@ class BrowserRepository(
     val downloads: Flow<List<DownloadEntity>> = downloadDao.observeAll()
     val sitePermissions: Flow<List<SitePermissionEntity>> = permissionDao.observeAll()
     val shortcuts: Flow<List<ShortcutEntity>> = shortcutDao.observeAll()
+    val wallpapers: Flow<List<WallpaperEntity>> = wallpaperDao.observeAll()
+    val favoriteWallpapers: Flow<List<WallpaperEntity>> = wallpaperDao.observeFavorites()
+    val recentWallpapers: Flow<List<WallpaperEntity>> = wallpaperDao.observeRecentlyUsed()
     val settings: Flow<BrowserSettings> = settingsStore.settingsFlow
 
     fun observeIsBookmarked(url: String): Flow<Boolean> = bookmarkDao.observeIsBookmarked(url)
@@ -52,6 +63,22 @@ class BrowserRepository(
                 )
             )
         }
+    }
+
+    suspend fun ensureDefaultLiveWallpapers() {
+        val baseTime = 1_700_000_000_000L
+        val presets = DskLivePreset.entries.mapIndexed { index, preset ->
+            WallpaperEntity(
+                id = preset.id,
+                title = preset.title,
+                type = WallpaperMediaType.DSK_LIVE.name,
+                livePresetId = preset.id,
+                styleTag = preset.styleTag,
+                promptText = preset.subtitle,
+                createdAt = baseTime + index
+            )
+        }
+        wallpaperDao.insertIgnore(presets)
     }
 
     suspend fun addShortcut(title: String, url: String) {
@@ -179,6 +206,138 @@ class BrowserRepository(
                 dest.outputStream().use { output -> input.copyTo(output) }
             }
             dest.absolutePath
+        }.getOrNull()
+    }
+
+    suspend fun importPhotoWallpaperFromUri(uri: Uri): WallpaperEntity? = withContext(Dispatchers.IO) {
+        runCatching {
+            val now = System.currentTimeMillis()
+            val dir = File(context.filesDir, "wallpapers").apply { mkdirs() }
+            val displayName = resolveUriDisplayName(uri) ?: "Photo Wallpaper"
+            val ext = displayName.substringAfterLast('.', "jpg")
+                .lowercase()
+                .takeIf { it in setOf("jpg", "jpeg", "png", "webp") }
+                ?: "jpg"
+            val dest = File(dir, "photo_$now.$ext")
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                dest.outputStream().use { output -> input.copyTo(output) }
+            } ?: return@runCatching null
+            if (!dest.exists() || dest.length() == 0L) return@runCatching null
+
+            val entity = WallpaperEntity(
+                id = "photo_$now",
+                title = displayName.substringBeforeLast('.').ifBlank { "My Photo" }.take(36),
+                type = WallpaperMediaType.PHOTO.name,
+                sourceUriOrPath = dest.absolutePath,
+                styleTag = "Photo",
+                createdAt = now
+            )
+            wallpaperDao.upsert(entity)
+            entity
+        }.getOrNull()
+    }
+
+    suspend fun importVideoWallpaperFromUri(uri: Uri): WallpaperEntity? = withContext(Dispatchers.IO) {
+        runCatching {
+            val now = System.currentTimeMillis()
+            val displayName = resolveUriDisplayName(uri) ?: "Video Wallpaper"
+            val persisted = runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+                true
+            }.getOrDefault(false)
+
+            val sourceRef: String = if (persisted) {
+                uri.toString()
+            } else {
+                // Only copy if under 50 MB when provider denies persistable URI grant
+                val dir = File(context.filesDir, "wallpapers").apply { mkdirs() }
+                val dest = File(dir, "video_$now.mp4")
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    dest.outputStream().use { output ->
+                        val buffer = ByteArray(16 * 1024)
+                        var copied = 0L
+                        val maxBytes = 50L * 1024L * 1024L
+                        while (true) {
+                            val read = input.read(buffer)
+                            if (read <= 0) break
+                            copied += read
+                            if (copied > maxBytes) {
+                                dest.delete()
+                                return@runCatching null
+                            }
+                            output.write(buffer, 0, read)
+                        }
+                    }
+                } ?: return@runCatching null
+                dest.absolutePath
+            }
+
+            val entity = WallpaperEntity(
+                id = "video_$now",
+                title = displayName.substringBeforeLast('.').ifBlank { "My Video" }.take(36),
+                type = WallpaperMediaType.VIDEO.name,
+                sourceUriOrPath = sourceRef,
+                styleTag = "Video",
+                videoMuted = true,
+                videoLoop = true,
+                createdAt = now
+            )
+            wallpaperDao.upsert(entity)
+            entity
+        }.getOrNull()
+    }
+
+    suspend fun saveAiGeneratedWallpaper(
+        bitmap: Bitmap,
+        prompt: String,
+        style: AiWallpaperStyle,
+        aspectRatio: AiAspectRatio
+    ): WallpaperEntity? = withContext(Dispatchers.IO) {
+        runCatching {
+            val now = System.currentTimeMillis()
+            val dir = File(context.filesDir, "wallpapers").apply { mkdirs() }
+            val dest = File(dir, "ai_$now.png")
+            dest.outputStream().use { out ->
+                bitmap.compress(Bitmap.CompressFormat.PNG, 95, out)
+            }
+            val entity = WallpaperEntity(
+                id = "ai_$now",
+                title = prompt.trim().take(28).ifBlank { "AI ${style.label}" },
+                type = WallpaperMediaType.AI_IMAGE.name,
+                sourceUriOrPath = dest.absolutePath,
+                styleTag = style.label,
+                promptText = prompt.trim(),
+                aspectRatio = aspectRatio.ratioValue,
+                createdAt = now
+            )
+            wallpaperDao.upsert(entity)
+            entity
+        }.getOrNull()
+    }
+
+    suspend fun upsertWallpaper(wallpaper: WallpaperEntity) = wallpaperDao.upsert(wallpaper)
+    suspend fun getWallpaperById(id: String): WallpaperEntity? = wallpaperDao.getById(id)
+    suspend fun setWallpaperFavorite(id: String, favorite: Boolean) = wallpaperDao.setFavorite(id, favorite)
+    suspend fun markWallpaperUsed(id: String) = wallpaperDao.markUsed(id, System.currentTimeMillis())
+
+    suspend fun deleteWallpaper(wallpaper: WallpaperEntity) = withContext(Dispatchers.IO) {
+        if (wallpaper.type == WallpaperMediaType.DSK_LIVE.name) return@withContext
+        val path = wallpaper.sourceUriOrPath
+        if (path.startsWith(context.filesDir.absolutePath)) {
+            runCatching { File(path).delete() }
+        }
+        wallpaperDao.deleteById(wallpaper.id)
+    }
+
+    private fun resolveUriDisplayName(uri: Uri): String? {
+        return runCatching {
+            context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+                val idx = c.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (idx >= 0 && c.moveToFirst()) c.getString(idx) else null
+            }
         }.getOrNull()
     }
 

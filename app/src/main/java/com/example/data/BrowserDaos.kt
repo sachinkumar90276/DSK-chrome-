@@ -127,3 +127,37 @@ interface SavedTabDao {
     @Query("DELETE FROM saved_tabs")
     suspend fun clearAll()
 }
+
+@Dao
+interface WallpaperDao {
+    @Query("SELECT * FROM wallpapers ORDER BY createdAt DESC")
+    fun observeAll(): Flow<List<WallpaperEntity>>
+
+    @Query("SELECT * FROM wallpapers WHERE id = :id LIMIT 1")
+    fun observeById(id: String): Flow<WallpaperEntity?>
+
+    @Query("SELECT * FROM wallpapers WHERE isFavorite = 1 ORDER BY createdAt DESC")
+    fun observeFavorites(): Flow<List<WallpaperEntity>>
+
+    @Query("SELECT * FROM wallpapers WHERE lastUsedAt > 0 ORDER BY lastUsedAt DESC LIMIT 20")
+    fun observeRecentlyUsed(): Flow<List<WallpaperEntity>>
+
+    @Query("SELECT * FROM wallpapers WHERE id = :id LIMIT 1")
+    suspend fun getById(id: String): WallpaperEntity?
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertIgnore(items: List<WallpaperEntity>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(item: WallpaperEntity)
+
+    @Query("UPDATE wallpapers SET isFavorite = :favorite WHERE id = :id")
+    suspend fun setFavorite(id: String, favorite: Boolean)
+
+    @Query("UPDATE wallpapers SET lastUsedAt = :timestamp WHERE id = :id")
+    suspend fun markUsed(id: String, timestamp: Long)
+
+    @Query("DELETE FROM wallpapers WHERE id = :id")
+    suspend fun deleteById(id: String)
+}
+

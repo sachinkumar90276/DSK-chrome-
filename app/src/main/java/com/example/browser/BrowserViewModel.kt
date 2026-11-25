@@ -18,6 +18,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.ai.AiSearchMode
 import com.example.ai.AiStreamEvent
+import com.example.ai.AiWallpaperGenState
 import com.example.ai.DskAiRepository
 import com.example.data.BookmarkEntity
 import com.example.data.BrowserDatabase
@@ -35,8 +36,15 @@ import com.example.data.SitePermissionType
 import com.example.data.StartupBehavior
 import com.example.data.ThemeMode
 import com.example.data.ToolbarLayout
+import com.example.data.WallpaperEntity
 import com.example.data.WallpaperPreset
 import com.example.download.DownloadEngine
+import com.example.wallpaper.AiAspectRatio
+import com.example.wallpaper.AiImageQuality
+import com.example.wallpaper.AiWallpaperStyle
+import com.example.wallpaper.AiWallpaperSuggestion
+import com.example.wallpaper.LiveWallpaperUtils
+import java.util.Calendar
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -105,6 +113,29 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     val shortcuts: StateFlow<List<ShortcutEntity>> = repository.shortcuts.stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
     )
+    val wallpapers: StateFlow<List<WallpaperEntity>> = repository.wallpapers.stateIn(
+        viewModelScope, SharingStarted.Eagerly, emptyList()
+    )
+    val favoriteWallpapers: StateFlow<List<WallpaperEntity>> = repository.favoriteWallpapers.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
+    )
+    val recentWallpapers: StateFlow<List<WallpaperEntity>> = repository.recentWallpapers.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
+    )
+    val activeBrowserWallpaper: StateFlow<WallpaperEntity?> = combine(
+        wallpapers,
+        settings
+    ) { list, s ->
+        if (s.activeBrowserWallpaperId.isNotBlank()) list.firstOrNull { it.id == s.activeBrowserWallpaperId } else null
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    val activeNewTabWallpaper: StateFlow<WallpaperEntity?> = combine(
+        wallpapers,
+        settings
+    ) { list, s ->
+        val targetId = s.activeNewTabWallpaperId.ifBlank { s.activeBrowserWallpaperId }
+        if (targetId.isNotBlank()) list.firstOrNull { it.id == targetId } else null
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     private val _showSplash = MutableStateFlow(true)
     val showSplash: StateFlow<Boolean> = _showSplash.asStateFlow()
@@ -189,12 +220,21 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     private val _translationState = MutableStateFlow(TranslationUiState())
     val translationState: StateFlow<TranslationUiState> = _translationState.asStateFlow()
 
+    private val _aiWallpaperGenState = MutableStateFlow<AiWallpaperGenState>(AiWallpaperGenState.Idle)
+    val aiWallpaperGenState: StateFlow<AiWallpaperGenState> = _aiWallpaperGenState.asStateFlow()
+
+    private val _isSystemLiveWallpaperActive = MutableStateFlow(
+        LiveWallpaperUtils.isDskLiveWallpaperActive(application)
+    )
+    val isSystemLiveWallpaperActive: StateFlow<Boolean> = _isSystemLiveWallpaperActive.asStateFlow()
+
     private var fileChooserCallback: ValueCallback<Array<Uri>>? = null
     var onLaunchFileChooserUi: ((WebChromeClient.FileChooserParams?) -> Unit)? = null
     var onRequestRuntimeOsPermissions: ((Array<String>, (Boolean) -> Unit) -> Unit)? = null
 
     private var suggestionJob: Job? = null
     private var aiJob: Job? = null
+    private var aiWallpaperJob: Job? = null
     private var translateJob: Job? = null
     private val rendererRecoveredTabs = mutableSetOf<String>()
 
@@ -497,6 +537,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
 
         viewModelScope.launch {
             repository.ensureDefaultShortcuts()
+            repository.ensureDefaultLiveWallpapers()
             val currentSettings = repository.settings.first()
             if (currentSettings.startupBehavior == StartupBehavior.RESTORE_TABS) {
                 val saved = repository.getSavedTabs()
@@ -1097,6 +1138,165 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     fun updateAskBeforeDownloading(enabled: Boolean) = viewModelScope.launch { settingsStore.updateAskBeforeDownloading(enabled) }
     fun updateDefaultSitePermission(type: SitePermissionType, decision: PermissionDecision) =
         viewModelScope.launch { settingsStore.updateDefaultPermission(type, decision) }
+
+    // DSK Wallpaper Studio
+    fun importPhotoWallpaper(uri: Uri, openPreviewAfterImport: Boolean = true) {
+        viewModelScope.launch {
+            val saved = repository.importPhotoWallpaperFromUri(uri)
+            if (saved != null) {
+                showMessage("Photo saved to My Wallpapers")
+                if (openPreviewAfterImport) {
+                    _activeOverlay.value = BrowserOverlay.WallpaperPreview(saved.id)
+                }
+            } else {
+                showMessage("Unable to import selected image")
+            }
+        }
+    }
+
+    fun importVideoWallpaper(uri: Uri, openPreviewAfterImport: Boolean = true) {
+        viewModelScope.launch {
+            val saved = repository.importVideoWallpaperFromUri(uri)
+            if (saved != null) {
+                showMessage("Video saved to Video Wallpapers")
+                if (openPreviewAfterImport) {
+                    _activeOverlay.value = BrowserOverlay.WallpaperPreview(saved.id)
+                }
+            } else {
+                showMessage("Could not import video (max 50 MB if persistent permission is unavailable)")
+            }
+        }
+    }
+
+    fun generateAiWallpaper(
+        prompt: String,
+        style: AiWallpaperStyle,
+        aspectRatio: AiAspectRatio,
+        quality: AiImageQuality
+    ) {
+        aiWallpaperJob?.cancel()
+        aiWallpaperJob = viewModelScope.launch {
+            _aiWallpaperGenState.value = AiWallpaperGenState.Loading(prompt.trim())
+            val result = aiRepository.generateWallpaperBitmap(prompt, style, aspectRatio, quality)
+            result.fold(
+                onSuccess = { bitmap ->
+                    val entity = repository.saveAiGeneratedWallpaper(bitmap, prompt, style, aspectRatio)
+                    if (entity != null) {
+                        _aiWallpaperGenState.value = AiWallpaperGenState.Success(entity, bitmap)
+                        showMessage("AI wallpaper generated and saved")
+                    } else {
+                        _aiWallpaperGenState.value = AiWallpaperGenState.Error("Failed to save generated image to storage.")
+                    }
+                },
+                onFailure = { error ->
+                    _aiWallpaperGenState.value = AiWallpaperGenState.Error(
+                        error.message ?: "AI image generation failed."
+                    )
+                }
+            )
+        }
+    }
+
+    fun resetAiWallpaperState() {
+        aiWallpaperJob?.cancel()
+        _aiWallpaperGenState.value = AiWallpaperGenState.Idle
+    }
+
+    fun saveWallpaperEdits(wallpaper: WallpaperEntity) {
+        viewModelScope.launch {
+            repository.upsertWallpaper(wallpaper)
+            showMessage("Wallpaper adjustments saved")
+        }
+    }
+
+    fun applyWallpaperToBrowser(wallpaper: WallpaperEntity) {
+        viewModelScope.launch {
+            repository.upsertWallpaper(wallpaper)
+            repository.markWallpaperUsed(wallpaper.id)
+            settingsStore.setActiveBrowserWallpaper(wallpaper.id)
+            showMessage("Applied '${wallpaper.title}' as Browser Wallpaper")
+        }
+    }
+
+    fun applyWallpaperToNewTab(wallpaper: WallpaperEntity) {
+        viewModelScope.launch {
+            repository.upsertWallpaper(wallpaper)
+            repository.markWallpaperUsed(wallpaper.id)
+            settingsStore.setActiveNewTabWallpaper(wallpaper.id)
+            showMessage("Applied '${wallpaper.title}' as New Tab Wallpaper")
+        }
+    }
+
+    fun clearBrowserAndNewTabWallpaper() {
+        viewModelScope.launch {
+            settingsStore.setActiveBrowserWallpaper("")
+            settingsStore.setActiveNewTabWallpaper("")
+            showMessage("Reset to default browser backdrop")
+        }
+    }
+
+    fun prepareAndroidLiveWallpaper(wallpaper: WallpaperEntity, launchChooser: (WallpaperEntity) -> Unit) {
+        viewModelScope.launch {
+            repository.upsertWallpaper(wallpaper)
+            repository.markWallpaperUsed(wallpaper.id)
+            settingsStore.setAndroidLiveWallpaperSource(wallpaper.id)
+            launchChooser(wallpaper)
+        }
+    }
+
+    fun refreshSystemLiveWallpaperStatus() {
+        _isSystemLiveWallpaperActive.value = LiveWallpaperUtils.isDskLiveWallpaperActive(getApplication())
+    }
+
+    fun toggleWallpaperFavorite(wallpaper: WallpaperEntity) {
+        viewModelScope.launch {
+            repository.setWallpaperFavorite(wallpaper.id, !wallpaper.isFavorite)
+        }
+    }
+
+    fun deleteWallpaper(wallpaper: WallpaperEntity) {
+        viewModelScope.launch {
+            val s = settings.value
+            if (s.activeBrowserWallpaperId == wallpaper.id) settingsStore.setActiveBrowserWallpaper("")
+            if (s.activeNewTabWallpaperId == wallpaper.id) settingsStore.setActiveNewTabWallpaper("")
+            repository.deleteWallpaper(wallpaper)
+            if (_activeOverlay.value == BrowserOverlay.WallpaperPreview(wallpaper.id)) {
+                _activeOverlay.value = BrowserOverlay.WallpaperStudio
+            }
+            showMessage("Wallpaper deleted")
+        }
+    }
+
+    fun updateWallpaperAppearance(
+        opacity: Float? = null,
+        blurDp: Float? = null,
+        brightness: Float? = null,
+        uiTransparency: Float? = null,
+        glassEffect: Boolean? = null,
+        transparentWebView: Boolean? = null,
+        aiSuggestions: Boolean? = null,
+        lowPowerStatic: Boolean? = null
+    ) = viewModelScope.launch {
+        settingsStore.updateWallpaperAppearance(
+            opacity = opacity,
+            blurDp = blurDp,
+            brightness = brightness,
+            uiTransparency = uiTransparency,
+            glassEffect = glassEffect,
+            transparentWebView = transparentWebView,
+            aiSuggestions = aiSuggestions,
+            lowPowerStatic = lowPowerStatic
+        )
+    }
+
+    fun computeAiWallpaperSuggestions(isDarkMode: Boolean): List<AiWallpaperSuggestion> {
+        val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+        return aiRepository.buildWallpaperSuggestions(
+            wallpapers = wallpapers.value,
+            isDarkMode = isDarkMode,
+            hourOfDay = hour
+        )
+    }
 
     // DSK AI Search
     fun sendAiPrompt(prompt: String, mode: AiSearchMode) {

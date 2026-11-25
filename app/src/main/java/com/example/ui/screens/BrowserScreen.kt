@@ -15,6 +15,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -62,13 +63,19 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.browser.BrowserOverlay
 import com.example.browser.BrowserViewModel
 import com.example.browser.UrlUtils
+import com.example.data.ThemeMode
 import com.example.data.ToolbarLayout
+import com.example.data.WallpaperEntity
+import com.example.data.WallpaperPreset
+import com.example.wallpaper.BrowserWallpaperBackdrop
 
 @Composable
 fun BrowserScreen(
     viewModel: BrowserViewModel,
     onVoiceSearch: () -> Unit,
     onUploadWallpaper: () -> Unit,
+    onPickVideoWallpaper: () -> Unit,
+    onLaunchAndroidLiveWallpaperChooser: (WallpaperEntity) -> Unit,
     onAddToHomeScreen: (title: String, url: String) -> Unit
 ) {
     val context = LocalContext.current
@@ -101,6 +108,17 @@ fun BrowserScreen(
     val snackbarMessage by viewModel.snackbarMessage.collectAsStateWithLifecycle()
     val aiMessages by viewModel.aiMessages.collectAsStateWithLifecycle()
     val translationState by viewModel.translationState.collectAsStateWithLifecycle()
+    val wallpapers by viewModel.wallpapers.collectAsStateWithLifecycle()
+    val favoriteWallpapers by viewModel.favoriteWallpapers.collectAsStateWithLifecycle()
+    val recentWallpapers by viewModel.recentWallpapers.collectAsStateWithLifecycle()
+    val activeBrowserWallpaper by viewModel.activeBrowserWallpaper.collectAsStateWithLifecycle()
+    val activeNewTabWallpaper by viewModel.activeNewTabWallpaper.collectAsStateWithLifecycle()
+    val aiWallpaperGenState by viewModel.aiWallpaperGenState.collectAsStateWithLifecycle()
+    val isSystemLiveWallpaperActive by viewModel.isSystemLiveWallpaperActive.collectAsStateWithLifecycle()
+
+    val systemDark = isSystemInDarkTheme()
+    val useDarkUi = activeTab.isIncognito || settings.themeMode == ThemeMode.DARK ||
+        (settings.themeMode == ThemeMode.SYSTEM && systemDark)
 
     val snackbarHostState = remember { SnackbarHostState() }
     LaunchedEffect(snackbarMessage) {
@@ -139,8 +157,30 @@ fun BrowserScreen(
     val hasTopBarContent = findInPage.isVisible || showChromeTopWebBar || showSplitTopAddressBar || showTopTabStrip
     val hasBottomBarContent = showChromeBottomBar || showSplitBottomNavBar || showBottomTabStrip
 
+    val backdropWallpaper = if (activeTab.isHomepage) activeNewTabWallpaper else activeBrowserWallpaper
+    val shouldRenderWallpaper = activeTab.isHomepage ||
+        backdropWallpaper != null ||
+        (settings.wallpaperPreset == WallpaperPreset.CUSTOM && settings.customWallpaperPath.isNotBlank())
+
     Box(modifier = Modifier.fillMaxSize()) {
+        if (shouldRenderWallpaper) {
+            BrowserWallpaperBackdrop(
+                wallpaper = backdropWallpaper,
+                settings = settings,
+                isIncognito = activeTab.isIncognito,
+                useDarkUi = useDarkUi,
+                modifier = Modifier.fillMaxSize()
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.background)
+            )
+        }
+
         Scaffold(
+            containerColor = Color.Transparent,
             contentWindowInsets = WindowInsets(0, 0, 0, 0),
             snackbarHost = {
                 SnackbarHost(
@@ -175,7 +215,9 @@ fun BrowserScreen(
                                 onCopyUrl = { url ->
                                     copyToClipboard(context, url)
                                     viewModel.showMessage("URL copied to clipboard")
-                                }
+                                },
+                                uiTransparency = settings.uiTransparency,
+                                glassEffectEnabled = settings.glassEffectEnabled
                             )
                         } else if (showSplitTopAddressBar) {
                             BrowserAddressBar(
@@ -194,7 +236,9 @@ fun BrowserScreen(
                                 onCopyUrl = { url ->
                                     copyToClipboard(context, url)
                                     viewModel.showMessage("URL copied to clipboard")
-                                }
+                                },
+                                uiTransparency = settings.uiTransparency,
+                                glassEffectEnabled = settings.glassEffectEnabled
                             )
                         }
 
@@ -205,7 +249,9 @@ fun BrowserScreen(
                                 applyTopStatusInset = !showChromeTopWebBar && !showSplitTopAddressBar,
                                 onSelectTab = viewModel::switchTab,
                                 onCloseTab = viewModel::closeTab,
-                                onNewTab = { viewModel.createNewTab(isIncognito = activeTab.isIncognito) }
+                                onNewTab = { viewModel.createNewTab(isIncognito = activeTab.isIncognito) },
+                                uiTransparency = settings.uiTransparency,
+                                glassEffectEnabled = settings.glassEffectEnabled
                             )
                         }
                     }
@@ -255,7 +301,9 @@ fun BrowserScreen(
                             applyTopStatusInset = false,
                             onSelectTab = viewModel::switchTab,
                             onCloseTab = viewModel::closeTab,
-                            onNewTab = { viewModel.createNewTab(isIncognito = activeTab.isIncognito) }
+                            onNewTab = { viewModel.createNewTab(isIncognito = activeTab.isIncognito) },
+                            uiTransparency = settings.uiTransparency,
+                            glassEffectEnabled = settings.glassEffectEnabled
                         )
                     }
 
@@ -275,7 +323,9 @@ fun BrowserScreen(
                             onCopyUrl = { url ->
                                 copyToClipboard(context, url)
                                 viewModel.showMessage("URL copied to clipboard")
-                            }
+                            },
+                            uiTransparency = settings.uiTransparency,
+                            glassEffectEnabled = settings.glassEffectEnabled
                         )
                     }
 
@@ -474,13 +524,13 @@ fun BrowserScreen(
             }
         }
 
-        // Overlays (Tabs, Menu, Bookmarks, History, Downloads, Settings, Permissions, AI Search, Translate, About)
+        // Overlays (Tabs, Menu, Bookmarks, History, Downloads, Settings, Permissions, AI Search, Translate, Wallpaper Studio, About)
         AnimatedVisibility(
             visible = activeOverlay != BrowserOverlay.None,
             enter = fadeIn() + slideInVertically(initialOffsetY = { it / 16 }),
             exit = fadeOut() + slideOutVertically(targetOffsetY = { it / 16 })
         ) {
-            when (activeOverlay) {
+            when (val overlay = activeOverlay) {
                 BrowserOverlay.Tabs -> TabOverviewScreen(
                     tabs = tabs,
                     activeTabId = activeTab.id,
@@ -532,6 +582,7 @@ fun BrowserScreen(
                         val started = viewModel.webViewPool.printPage(context, activeTab.id, activeTab.title)
                         if (!started) viewModel.showMessage("Open a webpage first to print")
                     },
+                    onOpenWallpaperStudio = { viewModel.setOverlay(BrowserOverlay.WallpaperStudio) },
                     onOpenSettings = { viewModel.setOverlay(BrowserOverlay.Settings) },
                     onOpenAbout = { viewModel.setOverlay(BrowserOverlay.About) }
                 )
@@ -579,6 +630,7 @@ fun BrowserScreen(
                     settings = settings,
                     onBack = { viewModel.setOverlay(BrowserOverlay.None) },
                     onOpenPermissions = { viewModel.setOverlay(BrowserOverlay.Permissions) },
+                    onOpenWallpaperStudio = { viewModel.setOverlay(BrowserOverlay.WallpaperStudio) },
                     onOpenAbout = { viewModel.setOverlay(BrowserOverlay.About) },
                     onUpdateThemeMode = viewModel::updateThemeMode,
                     onUpdateSearchEngine = viewModel::updateSearchEngine,
@@ -587,6 +639,7 @@ fun BrowserScreen(
                     onUpdateSafeSearch = viewModel::updateSafeSearch,
                     onUpdateWallpaperPreset = viewModel::updateWallpaperPreset,
                     onUploadWallpaper = onUploadWallpaper,
+                    onUpdateWallpaperAppearance = viewModel::updateWallpaperAppearance,
                     onUpdateHomepageVisibility = viewModel::updateHomepageVisibility,
                     onUpdateToolbarLayout = viewModel::updateToolbarLayout,
                     onUpdateFontSize = viewModel::updateWebFontSize,
@@ -630,6 +683,56 @@ fun BrowserScreen(
                     onSelectLanguage = viewModel::translateCurrentPage,
                     onCopiedToast = { viewModel.showMessage("Translation copied") }
                 )
+
+                BrowserOverlay.WallpaperStudio -> {
+                    val aiSuggestions = remember(wallpapers, useDarkUi) {
+                        viewModel.computeAiWallpaperSuggestions(useDarkUi)
+                    }
+                    WallpaperStudioScreen(
+                        settings = settings,
+                        wallpapers = wallpapers,
+                        favoriteWallpapers = favoriteWallpapers,
+                        recentWallpapers = recentWallpapers,
+                        suggestions = aiSuggestions,
+                        aiGenState = aiWallpaperGenState,
+                        isSystemLiveWallpaperActive = isSystemLiveWallpaperActive,
+                        onBack = { viewModel.setOverlay(BrowserOverlay.None) },
+                        onPickPhoto = onUploadWallpaper,
+                        onPickVideo = onPickVideoWallpaper,
+                        onOpenPreview = { wp -> viewModel.setOverlay(BrowserOverlay.WallpaperPreview(wp.id)) },
+                        onToggleFavorite = viewModel::toggleWallpaperFavorite,
+                        onApplyBrowserWallpaper = viewModel::applyWallpaperToBrowser,
+                        onApplyNewTabWallpaper = viewModel::applyWallpaperToNewTab,
+                        onSetAndroidLiveWallpaper = onLaunchAndroidLiveWallpaperChooser,
+                        onClearActiveWallpapers = viewModel::clearBrowserAndNewTabWallpaper,
+                        onGenerateAiWallpaper = viewModel::generateAiWallpaper,
+                        onResetAiState = viewModel::resetAiWallpaperState,
+                        onUpdateAppearance = viewModel::updateWallpaperAppearance
+                    )
+                }
+
+                is BrowserOverlay.WallpaperPreview -> {
+                    val previewWallpaper = wallpapers.firstOrNull { it.id == overlay.wallpaperId }
+                    if (previewWallpaper != null) {
+                        WallpaperPreviewScreen(
+                            wallpaper = previewWallpaper,
+                            settings = settings,
+                            isSystemLiveWallpaperActive = isSystemLiveWallpaperActive,
+                            onBack = { viewModel.setOverlay(BrowserOverlay.WallpaperStudio) },
+                            onSaveEdits = viewModel::saveWallpaperEdits,
+                            onSetBrowserWallpaper = viewModel::applyWallpaperToBrowser,
+                            onSetNewTabWallpaper = viewModel::applyWallpaperToNewTab,
+                            onSetAndroidLiveWallpaper = onLaunchAndroidLiveWallpaperChooser,
+                            onToggleFavorite = viewModel::toggleWallpaperFavorite,
+                            onDeleteWallpaper = viewModel::deleteWallpaper,
+                            onUpdateAppearance = viewModel::updateWallpaperAppearance
+                        )
+                    } else {
+                        LaunchedEffect(overlay.wallpaperId) {
+                            viewModel.setOverlay(BrowserOverlay.WallpaperStudio)
+                        }
+                    }
+                }
 
                 BrowserOverlay.About -> AboutDskChromeScreen(
                     onBack = { viewModel.setOverlay(BrowserOverlay.None) }

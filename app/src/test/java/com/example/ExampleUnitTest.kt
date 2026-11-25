@@ -1,11 +1,17 @@
 package com.example
 
+import com.example.ai.DskAiRepository
 import com.example.browser.TabState
 import com.example.browser.TabStateManager
 import com.example.browser.UrlUtils
 import com.example.data.SearchEngine
 import com.example.data.ToolbarLayout
+import com.example.data.WallpaperEntity
 import com.example.download.DownloadEngine
+import com.example.wallpaper.DskLivePreset
+import com.example.wallpaper.WallpaperFitMode
+import com.example.wallpaper.WallpaperMediaType
+import com.example.wallpaper.WallpaperStudioSection
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -121,6 +127,78 @@ class ExampleUnitTest {
         assertTrue(layouts.contains(ToolbarLayout.TOP_BAR))
         assertTrue(layouts.contains(ToolbarLayout.BOTTOM_FOCUS))
         assertTrue(layouts.contains(ToolbarLayout.STANDARD))
+    }
+
+    @Test
+    fun dskLivePresetsAndStudioSectionsAreComplete() {
+        assertEquals(5, DskLivePreset.entries.size)
+        DskLivePreset.entries.forEach { preset ->
+            assertEquals(preset, DskLivePreset.fromIdOrNull(preset.id))
+            assertEquals(preset, DskLivePreset.fromIdOrNull(preset.name))
+        }
+        assertNull(DskLivePreset.fromIdOrNull("unknown_preset_id"))
+        assertEquals(8, WallpaperStudioSection.entries.size)
+        assertTrue(WallpaperFitMode.entries.containsAll(listOf(
+            WallpaperFitMode.FILL,
+            WallpaperFitMode.FIT,
+            WallpaperFitMode.CENTER,
+            WallpaperFitMode.STRETCH
+        )))
+    }
+
+    @Test
+    fun aiWallpaperSuggestionsReflectThemeTimeAndFavorites() {
+        val repo = DskAiRepository()
+        val favSpace = WallpaperEntity(
+            id = "wp_space_1",
+            title = "Cosmos",
+            type = WallpaperMediaType.DSK_LIVE.name,
+            styleTag = "Space",
+            isFavorite = true
+        )
+        val nightSuggestions = repo.buildWallpaperSuggestions(
+            wallpapers = listOf(favSpace),
+            isDarkMode = true,
+            hourOfDay = 22
+        )
+        assertTrue(nightSuggestions.any { it.id == "sug_night_chrome" })
+        assertTrue(nightSuggestions.any { it.id == "sug_fav_space" })
+
+        val favCyber = WallpaperEntity(
+            id = "wp_cyber_1",
+            title = "Neon",
+            type = WallpaperMediaType.AI_IMAGE.name,
+            styleTag = "Cyberpunk",
+            isFavorite = true
+        )
+        val daySuggestions = repo.buildWallpaperSuggestions(
+            wallpapers = listOf(favCyber),
+            isDarkMode = false,
+            hourOfDay = 10
+        )
+        assertTrue(daySuggestions.any { it.id == "sug_day_prism" })
+        assertTrue(daySuggestions.any { it.id == "sug_fav_neon" })
+    }
+
+    @Test
+    fun wallpaperEntityHasSafeDefaultsForVideoAndTransforms() {
+        val wp = WallpaperEntity(
+            id = "test_wp",
+            title = "Test",
+            type = WallpaperMediaType.VIDEO.name
+        )
+        assertEquals(WallpaperFitMode.FILL.name, wp.fitMode)
+        assertEquals(1f, wp.zoomScale, 0.001f)
+        assertEquals(0f, wp.panX, 0.001f)
+        assertEquals(0f, wp.panY, 0.001f)
+        assertEquals(1f, wp.brightness, 0.001f)
+        assertEquals(1f, wp.contrast, 0.001f)
+        assertEquals(1f, wp.opacity, 0.001f)
+        assertTrue(wp.videoMuted)
+        assertTrue(wp.videoLoop)
+        assertEquals(1f, wp.videoSpeed, 0.001f)
+        assertEquals(0L, wp.videoTrimStartMs)
+        assertEquals(0L, wp.videoTrimEndMs)
     }
 }
 

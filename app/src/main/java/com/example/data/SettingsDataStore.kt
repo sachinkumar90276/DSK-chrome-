@@ -5,6 +5,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -76,6 +77,17 @@ data class BrowserSettings(
     val safeSearchEnabled: Boolean = false,
     val wallpaperPreset: WallpaperPreset = WallpaperPreset.AURORA,
     val customWallpaperPath: String = "",
+    val activeBrowserWallpaperId: String = "",
+    val activeNewTabWallpaperId: String = "",
+    val androidLiveWallpaperSourceId: String = "dsk_live_chrome_flow",
+    val wallpaperOpacity: Float = 0.92f,
+    val wallpaperBlurDp: Float = 0f,
+    val wallpaperBrightness: Float = 1f,
+    val uiTransparency: Float = 0.84f,
+    val glassEffectEnabled: Boolean = true,
+    val transparentWebViewEnabled: Boolean = true,
+    val aiWallpaperSuggestionsEnabled: Boolean = true,
+    val lowPowerStaticWallpaperMode: Boolean = false,
     val showHomepageClock: Boolean = true,
     val showHomepagePopular: Boolean = true,
     val showHomepageRecent: Boolean = true,
@@ -107,6 +119,17 @@ class SettingsDataStore(private val context: Context) {
         val SAFE_SEARCH = booleanPreferencesKey("safe_search")
         val WALLPAPER_PRESET = stringPreferencesKey("wallpaper_preset")
         val CUSTOM_WALLPAPER_PATH = stringPreferencesKey("custom_wallpaper_path")
+        val ACTIVE_BROWSER_WALLPAPER_ID = stringPreferencesKey("active_browser_wallpaper_id")
+        val ACTIVE_NEW_TAB_WALLPAPER_ID = stringPreferencesKey("active_new_tab_wallpaper_id")
+        val ANDROID_LIVE_WALLPAPER_SOURCE_ID = stringPreferencesKey("android_live_wallpaper_source_id")
+        val WALLPAPER_OPACITY = floatPreferencesKey("wallpaper_opacity")
+        val WALLPAPER_BLUR_DP = floatPreferencesKey("wallpaper_blur_dp")
+        val WALLPAPER_BRIGHTNESS = floatPreferencesKey("wallpaper_brightness")
+        val UI_TRANSPARENCY = floatPreferencesKey("ui_transparency")
+        val GLASS_EFFECT_ENABLED = booleanPreferencesKey("glass_effect_enabled")
+        val TRANSPARENT_WEBVIEW_ENABLED = booleanPreferencesKey("transparent_webview_enabled")
+        val AI_WALLPAPER_SUGGESTIONS_ENABLED = booleanPreferencesKey("ai_wallpaper_suggestions_enabled")
+        val LOW_POWER_STATIC_WALLPAPER = booleanPreferencesKey("low_power_static_wallpaper")
         val SHOW_CLOCK = booleanPreferencesKey("show_clock")
         val SHOW_POPULAR = booleanPreferencesKey("show_popular")
         val SHOW_RECENT = booleanPreferencesKey("show_recent")
@@ -140,6 +163,17 @@ class SettingsDataStore(private val context: Context) {
             wallpaperPreset = prefs[Keys.WALLPAPER_PRESET]?.let { runCatching { WallpaperPreset.valueOf(it) }.getOrNull() }
                 ?: WallpaperPreset.AURORA,
             customWallpaperPath = prefs[Keys.CUSTOM_WALLPAPER_PATH] ?: "",
+            activeBrowserWallpaperId = prefs[Keys.ACTIVE_BROWSER_WALLPAPER_ID] ?: "",
+            activeNewTabWallpaperId = prefs[Keys.ACTIVE_NEW_TAB_WALLPAPER_ID] ?: "",
+            androidLiveWallpaperSourceId = prefs[Keys.ANDROID_LIVE_WALLPAPER_SOURCE_ID] ?: "dsk_live_chrome_flow",
+            wallpaperOpacity = (prefs[Keys.WALLPAPER_OPACITY] ?: 0.92f).coerceIn(0.15f, 1f),
+            wallpaperBlurDp = (prefs[Keys.WALLPAPER_BLUR_DP] ?: 0f).coerceIn(0f, 24f),
+            wallpaperBrightness = (prefs[Keys.WALLPAPER_BRIGHTNESS] ?: 1f).coerceIn(0.3f, 1.5f),
+            uiTransparency = (prefs[Keys.UI_TRANSPARENCY] ?: 0.84f).coerceIn(0.35f, 1f),
+            glassEffectEnabled = prefs[Keys.GLASS_EFFECT_ENABLED] ?: true,
+            transparentWebViewEnabled = prefs[Keys.TRANSPARENT_WEBVIEW_ENABLED] ?: true,
+            aiWallpaperSuggestionsEnabled = prefs[Keys.AI_WALLPAPER_SUGGESTIONS_ENABLED] ?: true,
+            lowPowerStaticWallpaperMode = prefs[Keys.LOW_POWER_STATIC_WALLPAPER] ?: false,
             showHomepageClock = prefs[Keys.SHOW_CLOCK] ?: true,
             showHomepagePopular = prefs[Keys.SHOW_POPULAR] ?: true,
             showHomepageRecent = prefs[Keys.SHOW_RECENT] ?: true,
@@ -173,10 +207,44 @@ class SettingsDataStore(private val context: Context) {
     suspend fun updateSearchSuggestions(enabled: Boolean) = context.browserDataStore.edit { it[Keys.SEARCH_SUGGESTIONS] = enabled }
     suspend fun updateSearchHistory(enabled: Boolean) = context.browserDataStore.edit { it[Keys.SEARCH_HISTORY] = enabled }
     suspend fun updateSafeSearch(enabled: Boolean) = context.browserDataStore.edit { it[Keys.SAFE_SEARCH] = enabled }
-    suspend fun updateWallpaperPreset(preset: WallpaperPreset) = context.browserDataStore.edit { it[Keys.WALLPAPER_PRESET] = preset.name }
+    suspend fun updateWallpaperPreset(preset: WallpaperPreset) = context.browserDataStore.edit {
+        it[Keys.WALLPAPER_PRESET] = preset.name
+        it[Keys.ACTIVE_BROWSER_WALLPAPER_ID] = ""
+        it[Keys.ACTIVE_NEW_TAB_WALLPAPER_ID] = ""
+    }
     suspend fun updateCustomWallpaperPath(path: String) = context.browserDataStore.edit {
         it[Keys.CUSTOM_WALLPAPER_PATH] = path
         it[Keys.WALLPAPER_PRESET] = WallpaperPreset.CUSTOM.name
+    }
+    suspend fun setActiveBrowserWallpaper(wallpaperId: String) = context.browserDataStore.edit {
+        it[Keys.ACTIVE_BROWSER_WALLPAPER_ID] = wallpaperId
+    }
+    suspend fun setActiveNewTabWallpaper(wallpaperId: String) = context.browserDataStore.edit {
+        it[Keys.ACTIVE_NEW_TAB_WALLPAPER_ID] = wallpaperId
+    }
+    suspend fun setAndroidLiveWallpaperSource(wallpaperId: String) = context.browserDataStore.edit {
+        it[Keys.ANDROID_LIVE_WALLPAPER_SOURCE_ID] = wallpaperId
+    }
+    suspend fun updateWallpaperAppearance(
+        opacity: Float? = null,
+        blurDp: Float? = null,
+        brightness: Float? = null,
+        uiTransparency: Float? = null,
+        glassEffect: Boolean? = null,
+        transparentWebView: Boolean? = null,
+        aiSuggestions: Boolean? = null,
+        lowPowerStatic: Boolean? = null
+    ) {
+        context.browserDataStore.edit { prefs ->
+            opacity?.let { prefs[Keys.WALLPAPER_OPACITY] = it.coerceIn(0.15f, 1f) }
+            blurDp?.let { prefs[Keys.WALLPAPER_BLUR_DP] = it.coerceIn(0f, 24f) }
+            brightness?.let { prefs[Keys.WALLPAPER_BRIGHTNESS] = it.coerceIn(0.3f, 1.5f) }
+            uiTransparency?.let { prefs[Keys.UI_TRANSPARENCY] = it.coerceIn(0.35f, 1f) }
+            glassEffect?.let { prefs[Keys.GLASS_EFFECT_ENABLED] = it }
+            transparentWebView?.let { prefs[Keys.TRANSPARENT_WEBVIEW_ENABLED] = it }
+            aiSuggestions?.let { prefs[Keys.AI_WALLPAPER_SUGGESTIONS_ENABLED] = it }
+            lowPowerStatic?.let { prefs[Keys.LOW_POWER_STATIC_WALLPAPER] = it }
+        }
     }
     suspend fun updateHomepageVisibility(clock: Boolean? = null, popular: Boolean? = null, recent: Boolean? = null) {
         context.browserDataStore.edit { prefs ->

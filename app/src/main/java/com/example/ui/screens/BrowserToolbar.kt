@@ -78,6 +78,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
@@ -110,6 +111,8 @@ fun BrowserAddressBar(
     onOpenSecurityInfo: () -> Unit,
     onVoiceSearch: () -> Unit,
     onCopyUrl: (String) -> Unit,
+    uiTransparency: Float = 0.94f,
+    glassEffectEnabled: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -126,10 +129,17 @@ fun BrowserAddressBar(
         }
     }
 
+    val panelAlpha = uiTransparency.coerceIn(0.35f, 1f)
     Surface(
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 4.dp,
-        modifier = modifier.fillMaxWidth()
+        color = MaterialTheme.colorScheme.surface.copy(alpha = panelAlpha),
+        tonalElevation = if (glassEffectEnabled) 0.dp else 4.dp,
+        modifier = modifier
+            .fillMaxWidth()
+            .then(
+                if (glassEffectEnabled) {
+                    Modifier.border(0.5.dp, Color.White.copy(alpha = 0.16f))
+                } else Modifier
+            )
     ) {
         Column(
             modifier = Modifier
@@ -149,7 +159,7 @@ fun BrowserAddressBar(
                         .weight(1f)
                         .height(48.dp)
                         .clip(RoundedCornerShape(24.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = (panelAlpha * 0.92f).coerceIn(0.35f, 1f)))
                         .border(
                             width = 1.dp,
                             color = if (isEditing) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
@@ -506,11 +516,14 @@ fun ChromeUnifiedBar(
     onOpenSecurityInfo: () -> Unit,
     onVoiceSearch: () -> Unit,
     onCopyUrl: (String) -> Unit,
+    uiTransparency: Float = 0.94f,
+    glassEffectEnabled: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
     val focusRequester = remember { FocusRequester() }
+    val panelAlpha = uiTransparency.coerceIn(0.35f, 1f)
     val closedTabs by viewModel.closedTabs.collectAsStateWithLifecycle()
     var isEditing by remember { mutableStateOf(false) }
     var showTabActionsMenu by remember { mutableStateOf(false) }
@@ -638,10 +651,16 @@ fun ChromeUnifiedBar(
     }
 
     Surface(
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 4.dp,
-        shadowElevation = if (isAtBottom) 8.dp else 2.dp,
-        modifier = modifier.fillMaxWidth()
+        color = MaterialTheme.colorScheme.surface.copy(alpha = panelAlpha),
+        tonalElevation = if (glassEffectEnabled) 0.dp else 4.dp,
+        shadowElevation = if (glassEffectEnabled) 0.dp else if (isAtBottom) 8.dp else 2.dp,
+        modifier = modifier
+            .fillMaxWidth()
+            .then(
+                if (glassEffectEnabled) {
+                    Modifier.border(0.5.dp, Color.White.copy(alpha = 0.16f))
+                } else Modifier
+            )
     ) {
         Column(
             modifier = Modifier
@@ -690,7 +709,7 @@ fun ChromeUnifiedBar(
                         .weight(1f)
                         .height(44.dp)
                         .clip(RoundedCornerShape(22.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = (panelAlpha * 0.92f).coerceIn(0.35f, 1f)))
                         .border(
                             width = 1.dp,
                             color = if (isEditing) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.35f),
@@ -969,6 +988,7 @@ fun BrowserBottomNavBar(
     val tabs by viewModel.tabs.collectAsStateWithLifecycle()
     val activeTab by viewModel.activeTab.collectAsStateWithLifecycle()
     val closedTabs by viewModel.closedTabs.collectAsStateWithLifecycle()
+    val settings by viewModel.settings.collectAsStateWithLifecycle()
     val currentModeTabCount = remember(tabs, activeTab.isIncognito) {
         tabs.count { it.isIncognito == activeTab.isIncognito }
     }
@@ -984,6 +1004,8 @@ fun BrowserBottomNavBar(
         canRestoreClosedTab = closedTabs.isNotEmpty(),
         isAtTop = isAtTop,
         applyTopStatusInset = applyTopStatusInset,
+        uiTransparency = settings.uiTransparency,
+        glassEffectEnabled = settings.glassEffectEnabled,
         onBack = { viewModel.goBack() },
         onForward = viewModel::goForward,
         onReloadOrStop = viewModel::reloadOrStop,
@@ -1012,6 +1034,8 @@ fun BrowserBottomNavBar(
     canRestoreClosedTab: Boolean,
     isAtTop: Boolean = false,
     applyTopStatusInset: Boolean = false,
+    uiTransparency: Float = 0.94f,
+    glassEffectEnabled: Boolean = false,
     onBack: () -> Unit,
     onForward: () -> Unit,
     onReloadOrStop: () -> Unit,
@@ -1026,12 +1050,19 @@ fun BrowserBottomNavBar(
     modifier: Modifier = Modifier
 ) {
     var showTabActionsMenu by remember { mutableStateOf(false) }
+    val panelAlpha = uiTransparency.coerceIn(0.35f, 1f)
 
     Surface(
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = if (isAtTop) 4.dp else 6.dp,
-        shadowElevation = if (isAtTop) 2.dp else 8.dp,
-        modifier = modifier.fillMaxWidth()
+        color = MaterialTheme.colorScheme.surface.copy(alpha = panelAlpha),
+        tonalElevation = if (glassEffectEnabled) 0.dp else if (isAtTop) 4.dp else 6.dp,
+        shadowElevation = if (glassEffectEnabled) 0.dp else if (isAtTop) 2.dp else 8.dp,
+        modifier = modifier
+            .fillMaxWidth()
+            .then(
+                if (glassEffectEnabled) {
+                    Modifier.border(0.5.dp, Color.White.copy(alpha = 0.16f))
+                } else Modifier
+            )
     ) {
         Column(
             modifier = Modifier
@@ -1138,9 +1169,9 @@ fun BrowserBottomNavBar(
                             .clip(RoundedCornerShape(14.dp))
                             .background(
                                 if (isHomepage) {
-                                    MaterialTheme.colorScheme.primaryContainer
+                                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.85f)
                                 } else {
-                                    MaterialTheme.colorScheme.surface
+                                    Color.Transparent
                                 }
                             )
                             .padding(horizontal = 10.dp, vertical = 6.dp)
@@ -1294,11 +1325,14 @@ fun BrowserTabStrip(
     onSelectTab: (String) -> Unit,
     onCloseTab: (String) -> Unit,
     onNewTab: () -> Unit,
+    uiTransparency: Float = 0.94f,
+    glassEffectEnabled: Boolean = false,
     modifier: Modifier = Modifier
 ) {
+    val panelAlpha = uiTransparency.coerceIn(0.35f, 1f)
     Surface(
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 2.dp,
+        color = MaterialTheme.colorScheme.surface.copy(alpha = panelAlpha),
+        tonalElevation = if (glassEffectEnabled) 0.dp else 2.dp,
         modifier = modifier.fillMaxWidth()
     ) {
         Column(

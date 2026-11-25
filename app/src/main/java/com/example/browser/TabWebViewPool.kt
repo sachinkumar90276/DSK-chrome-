@@ -24,7 +24,8 @@ private data class AppliedWebConfig(
     val isDesktopMode: Boolean,
     val fontSizePercent: Int,
     val blockPopups: Boolean,
-    val softwareLayer: Boolean
+    val softwareLayer: Boolean,
+    val transparentBg: Boolean
 )
 
 class TabWebViewPool(
@@ -159,7 +160,12 @@ class TabWebViewPool(
     ): WebView {
         val wrappedContext = MutableContextWrapper(activityContext ?: context)
         val webView = WebView(wrappedContext).apply {
-            setBackgroundColor(if (isIncognito) 0xFF0E0C15.toInt() else Color.WHITE)
+            val bgColor = when {
+                isIncognito -> 0xFF0E0C15.toInt()
+                settings.transparentWebViewEnabled -> Color.TRANSPARENT
+                else -> Color.WHITE
+            }
+            setBackgroundColor(bgColor)
             if (forceSoftwareLayer) {
                 setLayerType(View.LAYER_TYPE_SOFTWARE, null)
             }
@@ -222,16 +228,28 @@ class TabWebViewPool(
         settings: BrowserSettings,
         force: Boolean = false
     ) {
+        val useTransparent = !isIncognito && settings.transparentWebViewEnabled
         val target = AppliedWebConfig(
             isIncognito = isIncognito,
             isDesktopMode = isDesktopMode,
             fontSizePercent = settings.webFontSizePercent,
             blockPopups = settings.blockPopups,
-            softwareLayer = forceSoftwareLayer
+            softwareLayer = forceSoftwareLayer,
+            transparentBg = useTransparent
         )
         val previous = appliedConfigs[tabId]
         if (!force && previous == target) return
         appliedConfigs[tabId] = target
+
+        if (force || previous?.isIncognito != isIncognito || previous?.transparentBg != useTransparent) {
+            webView.setBackgroundColor(
+                when {
+                    isIncognito -> 0xFF0E0C15.toInt()
+                    useTransparent -> Color.TRANSPARENT
+                    else -> Color.WHITE
+                }
+            )
+        }
 
         val ws = webView.settings
         if (force || previous == null) {
