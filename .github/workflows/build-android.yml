@@ -76,9 +76,24 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [ ! -f debug.keystore ] && [ -f debug.keystore.base64 ]; then
-            base64 --decode debug.keystore.base64 > debug.keystore
+          if [ ! -s debug.keystore ]; then
+            if [ -s debug.keystore.base64 ]; then
+              base64 --decode debug.keystore.base64 > debug.keystore
+            elif [ -s "$HOME/.android/debug.keystore" ]; then
+              cp "$HOME/.android/debug.keystore" debug.keystore
+            else
+              keytool -genkeypair -noprompt \
+                -keystore debug.keystore \
+                -storepass android \
+                -alias androiddebugkey \
+                -keypass android \
+                -keyalg RSA \
+                -keysize 2048 \
+                -validity 10000 \
+                -dname "CN=Android Debug,O=Android,C=US"
+            fi
           fi
+          test -s debug.keystore
 
       - name: Run unit tests
         run: gradle :app:testDebugUnitTest --tests "com.example.ExampleUnitTest" --no-daemon
@@ -99,6 +114,10 @@ jobs:
           AAPT2="$ANDROID_SDK_ROOT/build-tools/36.0.0/aapt2"
           if [ -x "$AAPT2" ]; then
             "$AAPT2" dump badging "$APK_PATH" | grep -E "^(package:|application-label:)"
+          fi
+          APKSIGNER="$ANDROID_SDK_ROOT/build-tools/36.0.0/apksigner"
+          if [ -x "$APKSIGNER" ]; then
+            "$APKSIGNER" verify --verbose "$APK_PATH"
           fi
 
       - name: Upload APK artifact
