@@ -1,0 +1,6 @@
+{
+  "name": "DSK CHROME",
+  "description": "A modern, full-featured Android web browser by DSK OFFICIAL with real WebView browsing, multi-tab management, bookmarks, history, download manager, incognito mode, and DSK AI Search.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
